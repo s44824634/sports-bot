@@ -57,7 +57,7 @@ ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.4,
         max_tokens: 500,
