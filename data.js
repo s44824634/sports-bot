@@ -62,6 +62,23 @@ export async function loadFootballData() {
   return footballData;
 }
 
+// 獲取今日/明日足球賽程
+export function getFootballSchedule(dateStr) {
+  if (!footballData) return [];
+  // football-data 日期格式通常是 DD/MM/YY 或 YYYY-MM-DD
+  return footballData.filter(m => {
+    const d = m.Date || '';
+    // 嘗試匹配各種日期格式
+    return d.includes(dateStr) || d === dateStr;
+  }).map(m => ({
+    date: m.Date,
+    time: m.Time || '',
+    home: m.HomeTeam,
+    away: m.AwayTeam,
+    league: m._league,
+  }));
+}
+
 function getTeamStats(matches, teamName, isHome = null, lastN = 5) {
   let filtered = matches.filter(m => m.HomeTeam === teamName || m.AwayTeam === teamName);
   if (isHome !== null) {
@@ -214,6 +231,34 @@ async function fetchEspnSchedule(sport, teamId) {
   }
 }
 
+async function fetchEspnUpcoming(sport, teamId, days = 3) {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/teams/${teamId}/schedule?season=2026`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const now = new Date();
+    const future = new Date();
+    future.setDate(now.getDate() + days);
+
+    return (data.events || []).filter(e => {
+      const ed = new Date(e.date);
+      return ed >= now && ed <= future;
+    }).map(e => {
+      const comp = e.competitions[0];
+      const home = comp.competitors.find(c => c.homeAway === 'home');
+      const away = comp.competitors.find(c => c.homeAway === 'away');
+      return {
+        date: e.date,
+        home: home?.team?.displayName || home?.team?.name,
+        away: away?.team?.displayName || away?.team?.name,
+      };
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
 function getTeamRecord(events, teamName) {
   let wins = 0, losses = 0;
   for (const e of events) {
@@ -269,4 +314,118 @@ ${away} 近5場: ${awayRec.wins}勝 ${awayRec.losses}負
 ${home} 最近: ${homeEvents.map(e => `vs ${e.away} ${e.homeScore}-${e.awayScore}`).join(', ')}
 ${away} 最近: ${awayEvents.map(e => `vs ${e.home} ${e.homeScore}-${e.awayScore}`).join(', ')}`
   };
+}
+
+// 檢查近期是否有這場比賽
+export async function checkMatchExists(sport, home, away) {
+  if (sport === 'soccer') {
+    if (!footballData) await loadFootballData();
+    // 檢查未來7天內是否有這場比賽
+    const today = new Date();
+    const future = new Date();
+    future.setDate(today.getDate() + 7);
+
+    const upcoming = footballData.filter(m => {
+      const d = m.Date;
+      if (!d) return false;
+      const parts = d.split('/');
+      let matchDate;
+      if (parts.length === 3) {
+        const [dd, mm, yy] = parts;
+        matchDate = new Date(`20${yy}-${mm}-${dd}`);
+      } else {
+        matchDate = new Date(d);
+      }
+      return matchDate >= today && matchDate <= future &&
+        (m.HomeTeam === home || m.AwayTeam === away);
+    });
+
+    const exact = upcoming.find(m => 
+      (m.HomeTeam === home && m.AwayTeam === away)
+    );
+
+    if (exact) return { exists: true, date: exact.Date, time: exact.Time || '' };
+    if (upcoming.length > 0) return { exists: false, similar: upcoming.slice(0, 3) };
+    return { exists: false };
+  }
+
+  if (sport === 'nba') {
+    const homeId = NBA_TEAM_IDS[home.toLowerCase()];
+    const awayId = NBA_TEAM_IDS[away.toLowerCase()];
+    if (!homeId || !awayId) return { exists: false };
+
+    const upcoming = await fetchEspnUpcoming('basketball/nba', homeId, 7);
+    if (!upcoming) return { exists: false };
+
+    const exact = upcoming.find(e => e.away === away || e.away?.toLowerCase().includes(away.toLowerCase()));
+    if (exact) return { exists: true, date: exact.date };
+    return { exists: false, similar: upcoming.slice(0, 3) };
+  }
+
+  if (sport === 'mlb') {
+    const homeId = MLB_TEAM_IDS[home.toLowerCase()];
+    const awayId = MLB_TEAM_IDS[away.toLowerCase()];
+    if (!homeId || !awayId) return { exists: false };
+
+    const upcoming = await fetchEspnUpcoming('baseball/mlb', homeId, 7);
+    if (!upcoming) return { exists: false };
+
+    const exact = upcoming.find(e => e.away === away || e.away?.toLowerCase().includes(away.toLowerCase()));
+    if (exact) return { exists: true, date: exact.date };
+    return { exists: false, similar: upcoming.slice(0, 3) };
+  }
+
+  return { exists: false };
+}
+
+// 獲取今日所有賽程
+export async function getTodaySchedule() {
+  const today = new Date();
+  const results = [];
+
+  // 足球
+  if (footballData) {
+    const todayStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getFullYear()).slice(2)}`;
+    const altStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const soccer = footballData.filter(m => m.Date === todayStr || m.Date === altStr).map(m => 
+      `⚽ ${m._league}: ${m.HomeTeam} vs ${m.AwayTeam} ${m.Time || ''}`
+    );
+    results.push(...soccer);
+  }
+
+  // NBA - 只查幾個熱門球隊的近期賽程
+  const nbaTeams = ['lakers', 'warriors', 'celtics'];
+  for (const team of nbaTeams) {
+    const id = NBA_TEAM_IDS[team];
+    if (!id) continue;
+    const upcoming = await fetchEspnUpcoming('basketball/nba', id, 1);
+    if (upcoming) {
+      upcoming.forEach(e => {
+        const d = new Date(e.date);
+        const now = new Date();
+        if (d.toDateString() === now.toDateString()) {
+          results.push(`🏀 NBA: ${e.home} vs ${e.away}`);
+        }
+      });
+    }
+  }
+
+  // MLB - 只查幾個熱門球隊
+  const mlbTeams = ['yankees', 'dodgers'];
+  for (const team of mlbTeams) {
+    const id = MLB_TEAM_IDS[team];
+    if (!id) continue;
+    const upcoming = await fetchEspnUpcoming('baseball/mlb', id, 1);
+    if (upcoming) {
+      upcoming.forEach(e => {
+        const d = new Date(e.date);
+        const now = new Date();
+        if (d.toDateString() === now.toDateString()) {
+          results.push(`⚾ MLB: ${e.home} vs ${e.away}`);
+        }
+      });
+    }
+  }
+
+  return results;
 }
