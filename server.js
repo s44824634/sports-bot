@@ -1,6 +1,6 @@
 import express from 'express';
 import 'dotenv/config';
-import { loadFootballData, analyzeFootball, analyzeNBA, analyzeMLB } from './data.js';
+import { loadFootballData, analyzeFootball, analyzeNBA, analyzeMLB, checkMatchExists, getTodaySchedule } from './data.js';
 
 const app = express();
 app.use(express.json());
@@ -15,17 +15,30 @@ function parseInput(text) {
   const t = text.trim();
   const parts = t.split(/\s+/);
 
-  if (parts.length >= 3) {
-    const sportRaw = parts[0].toUpperCase();
-    const sportMap = {
-      '足球': 'soccer', 'SOCCER': 'soccer', 'EPL': 'soccer', '英超': 'soccer',
-      '西甲': 'soccer', '意甲': 'soccer', '德甲': 'soccer', '法甲': 'soccer',
-      'NBA': 'nba', '籃球': 'nba', 'BASKETBALL': 'nba',
-      'MLB': 'mlb', '棒球': 'mlb', 'BASEBALL': 'mlb'
-    };
-    const sport = sportMap[sportRaw];
-    if (sport) {
-      return { sport, home: parts[1], away: parts[2] };
+  if (parts.length >= 1) {
+    const first = parts[0].toUpperCase();
+
+    // 賽程查詢指令
+    if (first === '今日赛程' || first === '今日賽程' || first === '今天赛程' || first === '今天賽程' || first === '今日比赛' || first === '今日比賽' || first === '今天比赛' || first === '今天比賽') {
+      return { type: 'schedule', sport: parts[1] || 'all' };
+    }
+
+    // 預測指令：「預測 足球 阿森納 切爾西」或「足球 阿森納 切爾西」
+    let startIdx = 0;
+    if (first === '預測' || first === '预测') startIdx = 1;
+
+    if (parts.length >= startIdx + 3) {
+      const sportRaw = parts[startIdx].toUpperCase();
+      const sportMap = {
+        '足球': 'soccer', 'SOCCER': 'soccer', 'EPL': 'soccer', '英超': 'soccer',
+        '西甲': 'soccer', '意甲': 'soccer', '德甲': 'soccer', '法甲': 'soccer',
+        'NBA': 'nba', '籃球': 'nba', 'BASKETBALL': 'nba',
+        'MLB': 'mlb', '棒球': 'mlb', 'BASEBALL': 'mlb'
+      };
+      const sport = sportMap[sportRaw];
+      if (sport) {
+        return { type: 'predict', sport, home: parts[startIdx + 1], away: parts[startIdx + 2] };
+      }
     }
   }
   return null;
@@ -34,6 +47,20 @@ function parseInput(text) {
 async function predictWithAI(sport, home, away) {
   const isSoccer = sport === 'soccer';
   const sportName = isSoccer ? '足球' : (sport === 'nba' ? 'NBA' : 'MLB');
+
+  // 檢查比賽是否存在
+  const matchCheck = await checkMatchExists(sport, home, away);
+  if (!matchCheck.exists) {
+    let warning = `⚠️ 近期賽程中未找到 ${home} vs ${away} 的比賽。`;
+    if (matchCheck.date) {
+      warning += `\n📅 最近一場是在 ${matchCheck.date}`;
+    }
+    if (matchCheck.similar && matchCheck.similar.length > 0) {
+      warning += `\n\n💡 類似場次：\n${matchCheck.similar.map(m => `${m.HomeTeam || m.home} vs ${m.AwayTeam || m.away} ${m.Date || m.date || ''}`).join('\n')}`;
+    }
+    warning += `\n\n我還是可以根據歷史數據給出分析，但請確認比賽時間是否正確。`;
+    return warning;
+  }
 
   // 嘗試獲取真實數據
   let dataContext = '';
@@ -69,6 +96,7 @@ ${hasRealData ? `以下為真實比賽數據，請**嚴格根據這些數據**�
 ${dataContext}` : `注意：目前沒有該球隊的詳細實時數據庫紀錄，請只給出大方向趨勢分析，**絕對禁止编造具体球员名字**，只談球隊整體風格與實力對比。`}
 
 比賽：${home} (主) vs ${away} (客)
+${matchCheck.date ? `比賽日期：${matchCheck.date} ${matchCheck.time || ''}` : ''}
 
 請嚴格按以下格式回答（繁體中文）：
 🏠 主勝: XX%
@@ -144,21 +172,40 @@ app.post('/webhook', async (req, res) => {
       const parsed = parseInput(text);
 
       if (!parsed) {
-        const help = `👋 歡迎使用運動預測機器人！
+        const help = `👋 歡迎使用運動預測機器人 v2.0！
 
-請依照以下格式輸入（用空格分隔）：
-⚽ 足球 Arsenal Chelsea
-⚽ 英超 阿森納 切爾西
-🏀 NBA Lakers Celtics
-🏀 籃球 湖人 塞爾提克
-⚾ MLB Yankees Dodgers
-⚾ 棒球 洋基 道奇
+📅 【查賽程】
+今日赛程  → 查看今天所有比賽
+足球 今天  → 查看今天足球比賽
+NBA 明天   → 查看明天NBA比賽
 
-💡 提示：英文隊名如有空格（如 Manchester City），請改用中文或縮寫`;
+🔮 【做預測】
+足球 Arsenal Chelsea
+英超 阿森納 切爾西
+NBA 湖人 塞爾提克
+MLB 洋基 道奇
+
+💡 提示：
+• 英文隊名如有空格（如 Manchester City），請改用中文
+• 預測前會先檢查近期是否有這場比賽
+• 沒有比賽的話會提醒你，避免「幻覺」預測`;
         await replyToLINE(replyToken, help);
         continue;
       }
 
+      // 賽程查詢
+      if (parsed.type === 'schedule') {
+        const schedule = await getTodaySchedule();
+        if (schedule.length === 0) {
+          await replyToLINE(replyToken, '📅 今天暫無比賽數據，或數據正在載入中。請稍後再試。');
+        } else {
+          const reply = `📅 今日比賽賽程：\n\n${schedule.join('\n')}`;
+          await replyToLINE(replyToken, reply);
+        }
+        continue;
+      }
+
+      // 預測
       const { sport, home, away } = parsed;
       console.log(`🔮 [${sport}] ${home} vs ${away}`);
 
@@ -171,7 +218,8 @@ app.post('/webhook', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: '運行中', 
-    service: '運動預測 LINE Bot',
+    service: '運動預測 LINE Bot v2.0',
+    features: ['賽程查詢', '比賽存在檢查', '真實數據預測'],
     supports: ['足球', 'NBA', 'MLB']
   });
 });
@@ -179,5 +227,5 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 伺服器啟動在 http://localhost:${PORT}`);
-  console.log(`📋 支援運動: 足球 / NBA / MLB`);
+  console.log(`📋 運動預測 Bot v2.0 - 足球 / NBA / MLB`);
 });
