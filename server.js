@@ -1,6 +1,6 @@
 import express from 'express';
 import 'dotenv/config';
-import { loadFootballData, analyzeFootball, analyzeNBA, analyzeMLB, checkMatchExists, getTodaySchedule } from './data.js';
+import { loadFootballData, analyzeFootball, analyzeNBA, analyzeMLB, checkMatchExists, getSchedule, getLiveScores } from './data.js';
 
 const app = express();
 app.use(express.json());
@@ -11,19 +11,39 @@ const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 // 啟動時自動載入足球數據
 loadFootballData().catch(e => console.log('足球數據載入失敗:', e.message));
 
+// 清理訊息（去掉@機器人的部分，支援群組）
+function cleanText(text) {
+  return text.replace(/@\S+/g, '').trim();
+}
+
 function parseInput(text) {
-  const t = text.trim();
+  const t = cleanText(text);
   const parts = t.split(/\s+/);
 
   if (parts.length >= 1) {
     const first = parts[0].toUpperCase();
 
-    // 賽程查詢指令
-    if (first === '今日赛程' || first === '今日賽程' || first === '今天赛程' || first === '今天賽程' || first === '今日比赛' || first === '今日比賽' || first === '今天比赛' || first === '今天比賽') {
-      return { type: 'schedule', sport: parts[1] || 'all' };
+    // 賽程查詢指令（支援繁簡輸入，但回覆全繁體）
+    const scheduleKeywords = ['今日賽程', '今天賽程', '今日比賽', '今天比賽'];
+    const tomorrowKeywords = ['明日賽程', '明天賽程', '明日比賽', '明天比賽'];
+    const scoreKeywords = ['比分', '即時比分', '目前比分', '現在比分', 'live', 'LIVE'];
+
+    if (scheduleKeywords.includes(first) || scheduleKeywords.some(k => t.includes(k))) {
+      const sport = parts[1] || 'all';
+      return { type: 'schedule', sport, days: 0 };
     }
 
-    // 預測指令：「預測 足球 阿森納 切爾西」或「足球 阿森納 切爾西」
+    if (tomorrowKeywords.includes(first) || tomorrowKeywords.some(k => t.includes(k))) {
+      const sport = parts[1] || 'all';
+      return { type: 'schedule', sport, days: 1 };
+    }
+
+    if (scoreKeywords.includes(first) || scoreKeywords.some(k => t.includes(k))) {
+      const sport = parts[1] || 'all';
+      return { type: 'live', sport };
+    }
+
+    // 預測指令
     let startIdx = 0;
     if (first === '預測' || first === '预测') startIdx = 1;
 
@@ -98,7 +118,7 @@ ${dataContext}` : `注意：目前沒有該球隊的詳細實時數據庫紀錄�
 比賽：${home} (主) vs ${away} (客)
 ${matchCheck.date ? `比賽日期：${matchCheck.date} ${matchCheck.time || ''}` : ''}
 
-請嚴格按以下格式回答（繁體中文）：
+請嚴格按以下格式回答（**務必使用繁體中文**，絕對禁止簡體字）：
 🏠 主勝: XX%
 ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
 📊 信心度: X/10
@@ -108,7 +128,8 @@ ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
 - 百分比加總${isSoccer ? '約等於100%' : '約等於100%（NBA/MLB無平局）'}
 - 信心度 1-10
 - ${hasRealData ? '分析必須呼應真實數據中的勝負、進球、主客場表現' : '只給大方向判斷，不編造細節'}
-- **絕對禁止编造球员名字或具体战术细节**`;
+- **絕對禁止编造球员名字或具体战术细节**
+- **務必使用繁體中文，禁止出現簡體字**`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -172,12 +193,17 @@ app.post('/webhook', async (req, res) => {
       const parsed = parseInput(text);
 
       if (!parsed) {
-        const help = `👋 歡迎使用運動預測機器人 v2.0！
+        const help = `👋 歡迎使用運動預測機器人 v3.0！
 
 📅 【查賽程】
-今日赛程  → 查看今天所有比賽
-足球 今天  → 查看今天足球比賽
-NBA 明天   → 查看明天NBA比賽
+今日賽程    → 查看今天所有比賽
+明日賽程    → 查看明天所有比賽
+足球 明天   → 查看明天足球比賽
+
+📊 【看比分】
+比分        → 查看所有進行中比賽
+比分 NBA    → 查看NBA進行中比賽
+比分 MLB    → 查看MLB進行中比賽
 
 🔮 【做預測】
 足球 Arsenal Chelsea
@@ -186,20 +212,45 @@ NBA 湖人 塞爾提克
 MLB 洋基 道奇
 
 💡 提示：
-• 英文隊名如有空格（如 Manchester City），請改用中文
-• 預測前會先檢查近期是否有這場比賽
-• 沒有比賽的話會提醒你，避免「幻覺」預測`;
+• 群組中也可以@我使用所有功能
+• 英文隊名如有空格，請改用中文
+• 預測前會先檢查近期是否有這場比賽`;
         await replyToLINE(replyToken, help);
         continue;
       }
 
       // 賽程查詢
       if (parsed.type === 'schedule') {
-        const schedule = await getTodaySchedule();
-        if (schedule.length === 0) {
-          await replyToLINE(replyToken, '📅 今天暫無比賽數據，或數據正在載入中。請稍後再試。');
+        const label = parsed.days === 0 ? '今日' : '明日';
+        const schedule = await getSchedule(parsed.days);
+
+        // 過濾特定運動
+        let filtered = schedule;
+        if (parsed.sport !== 'all') {
+          const sportMap = { '足球': '⚽', 'soccer': '⚽', 'NBA': '🏀', 'nba': '🏀', 'MLB': '⚾', 'mlb': '⚾', '籃球': '🏀', '棒球': '⚾' };
+          const emoji = sportMap[parsed.sport];
+          if (emoji) {
+            filtered = schedule.filter(s => s.startsWith(emoji));
+          }
+        }
+
+        if (filtered.length === 0) {
+          await replyToLINE(replyToken, `📅 ${label}暫無比賽數據，或數據正在載入中。請稍後再試。`);
         } else {
-          const reply = `📅 今日比賽賽程：\n\n${schedule.join('\n')}`;
+          const reply = `📅 ${label}比賽賽程：\n\n${filtered.join('\n')}`;
+          await replyToLINE(replyToken, reply);
+        }
+        continue;
+      }
+
+      // 即時比分
+      if (parsed.type === 'live') {
+        const scores = await getLiveScores(parsed.sport);
+
+        if (scores.length === 0) {
+          await replyToLINE(replyToken, '📊 目前暫無進行中的比賽。');
+        } else {
+          const reply = `📊 進行中比賽比分：\n\n${scores.join('\n\n')}`;
           await replyToLINE(replyToken, reply);
         }
         continue;
@@ -218,8 +269,8 @@ MLB 洋基 道奇
 app.get('/', (req, res) => {
   res.json({ 
     status: '運行中', 
-    service: '運動預測 LINE Bot v2.0',
-    features: ['賽程查詢', '比賽存在檢查', '真實數據預測'],
+    service: '運動預測 LINE Bot v3.0',
+    features: ['賽程查詢', '明日賽程', '即時比分', '比賽存在檢查', '真實數據預測', '群組支援'],
     supports: ['足球', 'NBA', 'MLB']
   });
 });
@@ -227,5 +278,5 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 伺服器啟動在 http://localhost:${PORT}`);
-  console.log(`📋 運動預測 Bot v2.0 - 足球 / NBA / MLB`);
+  console.log(`📋 運動預測 Bot v3.0 - 足球 / NBA / MLB`);
 });
