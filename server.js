@@ -1,6 +1,6 @@
 import express from 'express';
 import 'dotenv/config';
-import { loadFootballData, analyzeFootball, analyzeNBA, analyzeMLB, checkMatchExists, getSchedule, getLiveScores } from './data.js';
+import { loadFootballData, analyzeFootball, analyzeNBA, analyzeMLB, checkMatchExists, getSchedule, getLiveScores, translateToEnglish } from './data.js';
 
 const app = express();
 app.use(express.json());
@@ -68,8 +68,12 @@ async function predictWithAI(sport, home, away) {
   const isSoccer = sport === 'soccer';
   const sportName = isSoccer ? '足球' : (sport === 'nba' ? 'NBA' : 'MLB');
 
+  // 把中文隊名轉回英文（數據查詢用英文）
+  const homeEn = translateToEnglish(home);
+  const awayEn = translateToEnglish(away);
+
   // 檢查比賽是否存在
-  const matchCheck = await checkMatchExists(sport, home, away);
+  const matchCheck = await checkMatchExists(sport, homeEn, awayEn);
   if (!matchCheck.exists) {
     let warning = `⚠️ 近期賽程中未找到 ${home} vs ${away} 的比賽。`;
     if (matchCheck.date) {
@@ -88,19 +92,19 @@ async function predictWithAI(sport, home, away) {
 
   try {
     if (isSoccer) {
-      const stats = analyzeFootball(home, away);
+      const stats = analyzeFootball(homeEn, awayEn);
       if (stats) {
         hasRealData = true;
         dataContext = stats.text;
       }
     } else if (sport === 'nba') {
-      const stats = await analyzeNBA(home, away);
+      const stats = await analyzeNBA(homeEn, awayEn);
       if (stats) {
         hasRealData = true;
         dataContext = stats.text;
       }
     } else if (sport === 'mlb') {
-      const stats = await analyzeMLB(home, away);
+      const stats = await analyzeMLB(homeEn, awayEn);
       if (stats) {
         hasRealData = true;
         dataContext = stats.text;
@@ -118,7 +122,7 @@ ${dataContext}` : `注意：目前沒有該球隊的詳細實時數據庫紀錄�
 比賽：${home} (主) vs ${away} (客)
 ${matchCheck.date ? `比賽日期：${matchCheck.date} ${matchCheck.time || ''}` : ''}
 
-請嚴格按以下格式回答（**務必使用繁體中文**，絕對禁止簡體字）：
+請嚴格按以下格式回答（**100% 繁體中文**，禁止任何簡體字）：
 🏠 主勝: XX%
 ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
 📊 信心度: X/10
@@ -129,7 +133,8 @@ ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
 - 信心度 1-10
 - ${hasRealData ? '分析必須呼應真實數據中的勝負、進球、主客場表現' : '只給大方向判斷，不編造細節'}
 - **絕對禁止编造球员名字或具体战术细节**
-- **務必使用繁體中文，禁止出現簡體字**`;
+- **所有文字必須是繁體中文，禁止出現簡體字（如：胜→勝、队→隊、龙→龍、鸟→鳥、马→馬、鱼→魚）**
+- **如果無法確定繁體寫法，請改用同義詞或省略該字**`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
