@@ -560,8 +560,10 @@ export async function checkMatchExists(sport, home, away) {
   }
 
   if (sport === 'nba') {
-    const homeId = NBA_TEAM_IDS[home.toLowerCase()];
-    const awayId = NBA_TEAM_IDS[away.toLowerCase()];
+    const homeLower = home.toLowerCase();
+    const awayLower = away.toLowerCase();
+    const homeId = NBA_TEAM_IDS[homeLower] || NBA_TEAM_IDS[homeLower.split(' ').pop()] || NBA_TEAM_IDS[homeLower.split(' ').slice(-2).join(' ')];
+    const awayId = NBA_TEAM_IDS[awayLower] || NBA_TEAM_IDS[awayLower.split(' ').pop()] || NBA_TEAM_IDS[awayLower.split(' ').slice(-2).join(' ')];
     if (!homeId || !awayId) return { exists: false };
 
     const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${homeId}/schedule?season=2026`;
@@ -592,8 +594,10 @@ export async function checkMatchExists(sport, home, away) {
   }
 
   if (sport === 'mlb') {
-    const homeId = MLB_TEAM_IDS[home.toLowerCase()];
-    const awayId = MLB_TEAM_IDS[away.toLowerCase()];
+    const homeLower = home.toLowerCase();
+    const awayLower = away.toLowerCase();
+    const homeId = MLB_TEAM_IDS[homeLower] || MLB_TEAM_IDS[homeLower.split(' ').pop()] || MLB_TEAM_IDS[homeLower.split(' ').slice(-2).join(' ')];
+    const awayId = MLB_TEAM_IDS[awayLower] || MLB_TEAM_IDS[awayLower.split(' ').pop()] || MLB_TEAM_IDS[awayLower.split(' ').slice(-2).join(' ')];
     if (!homeId || !awayId) return { exists: false };
 
     const url = `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/${homeId}/schedule?season=2026`;
