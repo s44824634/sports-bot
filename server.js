@@ -23,7 +23,7 @@ function parseInput(text) {
   if (parts.length >= 1) {
     const first = parts[0].toUpperCase();
 
-    // 賽程查詢指令（支援繁簡輸入，但回覆全繁體）
+    // 賽程查詢指令
     const scheduleKeywords = ['今日賽程', '今天賽程', '今日比賽', '今天比賽'];
     const tomorrowKeywords = ['明日賽程', '明天賽程', '明日比賽', '明天比賽'];
     const scoreKeywords = ['比分', '即時比分', '目前比分', '現在比分', 'live', 'LIVE'];
