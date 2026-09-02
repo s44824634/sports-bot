@@ -64,6 +64,20 @@ function parseInput(text) {
   return null;
 }
 
+// 帶超時的 fetch
+async function fetchWithTimeout(url, options = {}, timeout = 5000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
 async function predictWithAI(sport, home, away) {
   const isSoccer = sport === 'soccer';
   const sportName = isSoccer ? '足球' : (sport === 'nba' ? 'NBA' : 'MLB');
@@ -72,21 +86,28 @@ async function predictWithAI(sport, home, away) {
   const homeEn = translateToEnglish(home);
   const awayEn = translateToEnglish(away);
 
-  // 檢查比賽是否存在
-  const matchCheck = await checkMatchExists(sport, homeEn, awayEn);
+  // 檢查比賽是否存在（3秒超時）
+  let matchCheck = { exists: false };
+  try {
+    const checkPromise = checkMatchExists(sport, homeEn, awayEn);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('check timeout')), 3000)
+    );
+    matchCheck = await Promise.race([checkPromise, timeoutPromise]);
+  } catch (e) {
+    console.log('比賽檢查超時，繼續預測');
+  }
+
   if (!matchCheck.exists) {
     let warning = `⚠️ 近期賽程中未找到 ${home} vs ${away} 的比賽。`;
     if (matchCheck.date) {
       warning += `\n📅 最近一場是在 ${matchCheck.date}`;
     }
-    if (matchCheck.similar && matchCheck.similar.length > 0) {
-      warning += `\n\n💡 類似場次：\n${matchCheck.similar.map(m => `${m.HomeTeam || m.home} vs ${m.AwayTeam || m.away} ${m.Date || m.date || ''}`).join('\n')}`;
-    }
     warning += `\n\n我還是可以根據歷史數據給出分析，但請確認比賽時間是否正確。`;
-    return warning;
+    // 不直接回傳警告，繼續給AI分析（因為可能只是賽程檢查失敗）
   }
 
-  // 嘗試獲取真實數據
+  // 嘗試獲取真實數據（5秒超時）
   let dataContext = '';
   let hasRealData = false;
 
@@ -98,20 +119,28 @@ async function predictWithAI(sport, home, away) {
         dataContext = stats.text;
       }
     } else if (sport === 'nba') {
-      const stats = await analyzeNBA(homeEn, awayEn);
+      const statsPromise = analyzeNBA(homeEn, awayEn);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('nba data timeout')), 5000)
+      );
+      const stats = await Promise.race([statsPromise, timeoutPromise]);
       if (stats) {
         hasRealData = true;
         dataContext = stats.text;
       }
     } else if (sport === 'mlb') {
-      const stats = await analyzeMLB(homeEn, awayEn);
+      const statsPromise = analyzeMLB(homeEn, awayEn);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('mlb data timeout')), 5000)
+      );
+      const stats = await Promise.race([statsPromise, timeoutPromise]);
       if (stats) {
         hasRealData = true;
         dataContext = stats.text;
       }
     }
   } catch (e) {
-    console.log('數據獲取失敗:', e.message);
+    console.log('數據獲取超時:', e.message);
   }
 
   const prompt = `你是一位專業運動數據分析師，專精${sportName}。
@@ -137,6 +166,9 @@ ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
 - **如果無法確定繁體寫法，請改用同義詞或省略該字**`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // AI 10秒超時
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -149,7 +181,10 @@ ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
         temperature: 0.2,
         max_tokens: 500,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const err = await response.text();
@@ -159,6 +194,9 @@ ${isSoccer ? '🤝 平局: XX%\n' : ''}✈️ 客勝: XX%
     const data = await response.json();
     return data.choices[0].message.content;
   } catch (err) {
+    if (err.name === 'AbortError') {
+      return `⚠️ AI 預測回覆超時（10秒），請再試一次。\n（Groq 伺服器繁忙，建議稍後重試）`;
+    }
     console.error('預測失敗:', err);
     return `⚠️ 預測暫時無法使用，請稍後再試。\n錯誤: ${err.message}`;
   }
@@ -229,7 +267,6 @@ MLB 洋基 道奇
         const label = parsed.days === 0 ? '今日' : '明日';
         const schedule = await getSchedule(parsed.days);
 
-        // 過濾特定運動
         let filtered = schedule;
         if (parsed.sport !== 'all') {
           const sportMap = { '足球': '⚽', 'soccer': '⚽', 'NBA': '🏀', 'nba': '🏀', 'MLB': '⚾', 'mlb': '⚾', '籃球': '🏀', '棒球': '⚾' };
