@@ -52,7 +52,7 @@ const TEAM_NAME_EN = {};
 for (const [en, zh] of Object.entries(TEAM_NAME_ZH)) {
   TEAM_NAME_EN[zh] = en;
   // 也加入簡體映射
-  const zhSimple = zh.replace(/國/g, '国').replace(/馬/g, '马').replace(/魚/g, '鱼').replace(/鳥/g, '鸟').replace(/龍/g, '龙').replace(/隊/g, '队').replace(/勝/g, '胜').replace/負/g, '负');
+  const zhSimple = zh.replace(/國/g, '国').replace(/馬/g, '马').replace(/魚/g, '鱼').replace(/鳥/g, '鸟').replace(/龍/g, '龙').replace(/隊/g, '队').replace(/勝/g, '胜')..replace(/負/g, '负');
   TEAM_NAME_EN[zhSimple] = en;
 }
 
