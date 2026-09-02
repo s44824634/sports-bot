@@ -1,44 +1,80 @@
+import { readFileSync } from 'fs';
+
 // ========== 球隊名稱翻譯對照表 ==========
 const TEAM_NAME_ZH = {
   // MLB
-  'Pittsburgh Pirates': '匹茲堡海盜', 'San Francisco Giants': '舊金山巨人',
-  'Cleveland Guardians': '克里夫蘭守護者', 'Toronto Blue Jays': '多倫多藍鳥',
-  'Houston Astros': '休士頓太空人', 'Chicago White Sox': '芝加哥白襪',
-  'Baltimore Orioles': '巴爾的摩金鶯', 'Boston Red Sox': '波士頓紅襪',
-  'Chicago Cubs': '芝加哥小熊', 'Milwaukee Brewers': '密爾瓦基釀酒人',
-  'Kansas City Royals': '堪薩斯市皇家', 'Miami Marlins': '邁阿密馬林魚',
-  'Texas Rangers': '德州遊騎兵', 'Tampa Bay Rays': '坦帕灣光芒',
-  'Seattle Mariners': '西雅圖水手', 'Athletics': '奧克蘭運動家',
-  'Los Angeles Dodgers': '洛杉磯道奇', 'St. Louis Cardinals': '聖路易紅雀',
-  'New York Yankees': '紐約洋基', 'New York Mets': '紐約大都會',
-  'Philadelphia Phillies': '費城費城人', 'Atlanta Braves': '亞特蘭大勇士',
-  'Cincinnati Reds': '辛辛那提紅人', 'San Diego Padres': '聖地牙哥教士',
-  'Arizona Diamondbacks': '亞利桑那響尾蛇', 'Colorado Rockies': '科羅拉多洛磯',
-  'Los Angeles Angels': '洛杉磯天使', 'Detroit Tigers': '底特律老虎',
-  'Minnesota Twins': '明尼蘇達雙城', 'Washington Nationals': '華盛頓國民',
+  'Pittsburgh Pirates': '匹茲堡海盜',
+  'San Francisco Giants': '舊金山巨人',
+  'Cleveland Guardians': '克里夫蘭守護者',
+  'Toronto Blue Jays': '多倫多藍鳥',
+  'Houston Astros': '休士頓太空人',
+  'Chicago White Sox': '芝加哥白襪',
+  'Baltimore Orioles': '巴爾的摩金鶯',
+  'Boston Red Sox': '波士頓紅襪',
+  'Chicago Cubs': '芝加哥小熊',
+  'Milwaukee Brewers': '密爾瓦基釀酒人',
+  'Kansas City Royals': '堪薩斯市皇家',
+  'Miami Marlins': '邁阿密馬林魚',
+  'Texas Rangers': '德州遊騎兵',
+  'Tampa Bay Rays': '坦帕灣光芒',
+  'Seattle Mariners': '西雅圖水手',
+  'Athletics': '奧克蘭運動家',
+  'Los Angeles Dodgers': '洛杉磯道奇',
+  'St. Louis Cardinals': '聖路易紅雀',
+  'New York Yankees': '紐約洋基',
+  'New York Mets': '紐約大都會',
+  'Philadelphia Phillies': '費城費城人',
+  'Atlanta Braves': '亞特蘭大勇士',
+  'Cincinnati Reds': '辛辛那提紅人',
+  'San Diego Padres': '聖地牙哥教士',
+  'Arizona Diamondbacks': '亞利桑那響尾蛇',
+  'Colorado Rockies': '科羅拉多洛磯',
+  'Los Angeles Angels': '洛杉磯天使',
+  'Detroit Tigers': '底特律老虎',
+  'Minnesota Twins': '明尼蘇達雙城',
+  'Washington Nationals': '華盛頓國民',
   // NBA
-  'Los Angeles Lakers': '洛杉磯湖人', 'Boston Celtics': '波士頓塞爾提克',
-  'Golden State Warriors': '金州勇士', 'Chicago Bulls': '芝加哥公牛',
-  'Miami Heat': '邁阿密熱火', 'New York Knicks': '紐約尼克',
-  'Brooklyn Nets': '布魯克林籃網', 'Dallas Mavericks': '達拉斯獨行俠',
-  'Phoenix Suns': '鳳凰城太陽', 'Milwaukee Bucks': '密爾瓦基公鹿',
-  'Philadelphia 76ers': '費城七六人', 'Denver Nuggets': '丹佛金塊',
-  'LA Clippers': '洛杉磯快艇', 'Toronto Raptors': '多倫多暴龍',
-  'Houston Rockets': '休士頓火箭', 'San Antonio Spurs': '聖安東尼奧馬刺',
-  'Oklahoma City Thunder': '奧克拉荷馬雷霆', 'Utah Jazz': '猶他爵士',
-  'Portland Trail Blazers': '波特蘭拓荒者', 'Sacramento Kings': '沙加緬度國王',
-  'Indiana Pacers': '印第安納溜馬', 'Detroit Pistons': '底特律活塞',
-  'Cleveland Cavaliers': '克里夫蘭騎士', 'Atlanta Hawks': '亞特蘭大老鷹',
-  'Charlotte Hornets': '夏洛特黃蜂', 'Washington Wizards': '華盛頓巫師',
-  'Orlando Magic': '奧蘭多魔術', 'Minnesota Timberwolves': '明尼蘇達灰狼',
-  'Memphis Grizzlies': '曼菲斯灰熊', 'New Orleans Pelicans': '紐奧良鵜鶘',
+  'Los Angeles Lakers': '洛杉磯湖人',
+  'Boston Celtics': '波士頓塞爾提克',
+  'Golden State Warriors': '金州勇士',
+  'Chicago Bulls': '芝加哥公牛',
+  'Miami Heat': '邁阿密熱火',
+  'New York Knicks': '紐約尼克',
+  'Brooklyn Nets': '布魯克林籃網',
+  'Dallas Mavericks': '達拉斯獨行俠',
+  'Phoenix Suns': '鳳凰城太陽',
+  'Milwaukee Bucks': '密爾瓦基公鹿',
+  'Philadelphia 76ers': '費城七六人',
+  'Denver Nuggets': '丹佛金塊',
+  'LA Clippers': '洛杉磯快艇',
+  'Toronto Raptors': '多倫多暴龍',
+  'Houston Rockets': '休士頓火箭',
+  'San Antonio Spurs': '聖安東尼奧馬刺',
+  'Oklahoma City Thunder': '奧克拉荷馬雷霆',
+  'Utah Jazz': '猶他爵士',
+  'Portland Trail Blazers': '波特蘭拓荒者',
+  'Sacramento Kings': '沙加緬度國王',
+  'Indiana Pacers': '印第安納溜馬',
+  'Detroit Pistons': '底特律活塞',
+  'Cleveland Cavaliers': '克里夫蘭騎士',
+  'Atlanta Hawks': '亞特蘭大老鷹',
+  'Charlotte Hornets': '夏洛特黃蜂',
+  'Washington Wizards': '華盛頓巫師',
+  'Orlando Magic': '奧蘭多魔術',
+  'Minnesota Timberwolves': '明尼蘇達灰狼',
+  'Memphis Grizzlies': '曼菲斯灰熊',
+  'New Orleans Pelicans': '紐奧良鵜鶘',
 };
+
+// 反向翻譯：中文 → 英文
+const TEAM_NAME_EN = {};
+for (const [en, zh] of Object.entries(TEAM_NAME_ZH)) {
+  TEAM_NAME_EN[zh] = en;
+}
 
 function translateTeamName(name) {
   if (!name) return name;
-  // 先嘗試完全匹配
   if (TEAM_NAME_ZH[name]) return TEAM_NAME_ZH[name];
-  // 嘗試部分匹配（去除城市名）
   for (const [en, zh] of Object.entries(TEAM_NAME_ZH)) {
     if (name.includes(en.split(' ').pop()) || en.includes(name)) {
       return zh;
@@ -47,35 +83,22 @@ function translateTeamName(name) {
   return name;
 }
 
-// 反向翻譯：中文 → 英文（用於查詢數據）
-const TEAM_NAME_EN = {};
-for (const [en, zh] of Object.entries(TEAM_NAME_ZH)) {
-  TEAM_NAME_EN[zh] = en;
-  // 也加入簡體映射
-  const zhSimple = zh.replace(/國/g, '国').replace(/馬/g, '马').replace(/魚/g, '鱼').replace(/鳥/g, '鸟').replace(/龍/g, '龙').replace(/隊/g, '队').replace(/勝/g, '胜')..replace(/負/g, '负');
-  TEAM_NAME_EN[zhSimple] = en;
-}
-
 export function translateToEnglish(name) {
   if (!name) return name;
-  // 1. 直接匹配
   if (TEAM_NAME_EN[name]) return TEAM_NAME_EN[name];
 
-  // 2. 模糊匹配：只要輸入的隊名「對到兩個字以上」就自動配對
+  // 模糊匹配：只要輸入的隊名「對到兩個字以上」
   let bestMatch = null;
   let bestScore = 0;
 
   for (const [zh, en] of Object.entries(TEAM_NAME_EN)) {
-    // 計算共同子串長度（簡化版：檢查是否互相包含）
     if (zh.includes(name)) {
-      // 用戶輸入被完整包含在對照表中（如「海盜」在「匹茲堡海盜」中）
       const score = name.length;
       if (score >= 2 && score > bestScore) {
         bestScore = score;
         bestMatch = en;
       }
     } else if (name.includes(zh)) {
-      // 對照表被完整包含在用戶輸入中（如「洛杉磯湖人」包含「湖人」）
       const score = zh.length;
       if (score >= 2 && score > bestScore) {
         bestScore = score;
@@ -86,26 +109,18 @@ export function translateToEnglish(name) {
 
   if (bestMatch) return bestMatch;
 
-  // 3. 嘗試逐字匹配（至少兩個字相同）
+  // 逐字匹配（至少兩個字相同）
   for (const [zh, en] of Object.entries(TEAM_NAME_EN)) {
-    let matchCount = 0;
     for (let i = 0; i < name.length - 1; i++) {
       const twoChars = name.substring(i, i + 2);
       if (zh.includes(twoChars)) {
-        matchCount = Math.max(matchCount, 2);
-        break;
+        return en;
       }
-    }
-    if (matchCount >= 2) {
-      return en;
     }
   }
 
-  return name; // 找不到就回傳原樣
+  return name;
 }
-
-
-import { readFileSync } from 'fs';
 
 // ========== 足球 CSV 自動下載與解析 ==========
 let footballData = null;
@@ -245,7 +260,6 @@ export async function getSchedule(daysOffset) {
   const ds = formatDateStr(target);
   const results = [];
 
-  // 足球
   if (footballData) {
     const soccer = footballData.filter(m => m.Date === ds.slash || m.Date === ds.iso).map(m => 
       `⚽ ${m._league}: ${m.HomeTeam} vs ${m.AwayTeam} ${m.Time || ''}`
@@ -253,7 +267,6 @@ export async function getSchedule(daysOffset) {
     results.push(...soccer);
   }
 
-  // NBA/MLB 從ESPN scoreboard獲取
   const nbaEvents = await fetchEspnScoreboard('basketball/nba', target);
   nbaEvents.forEach(e => results.push(`🏀 NBA: ${e.home} vs ${e.away} ${e.time || ''}`));
 
