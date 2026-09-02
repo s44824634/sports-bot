@@ -47,6 +47,64 @@ function translateTeamName(name) {
   return name;
 }
 
+// 反向翻譯：中文 → 英文（用於查詢數據）
+const TEAM_NAME_EN = {};
+for (const [en, zh] of Object.entries(TEAM_NAME_ZH)) {
+  TEAM_NAME_EN[zh] = en;
+  // 也加入簡體映射
+  const zhSimple = zh.replace(/國/g, '国').replace(/馬/g, '马').replace(/魚/g, '鱼').replace(/鳥/g, '鸟').replace(/龍/g, '龙').replace(/隊/g, '队').replace(/勝/g, '胜').replace/負/g, '负');
+  TEAM_NAME_EN[zhSimple] = en;
+}
+
+export function translateToEnglish(name) {
+  if (!name) return name;
+  // 1. 直接匹配
+  if (TEAM_NAME_EN[name]) return TEAM_NAME_EN[name];
+
+  // 2. 模糊匹配：只要輸入的隊名「對到兩個字以上」就自動配對
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const [zh, en] of Object.entries(TEAM_NAME_EN)) {
+    // 計算共同子串長度（簡化版：檢查是否互相包含）
+    if (zh.includes(name)) {
+      // 用戶輸入被完整包含在對照表中（如「海盜」在「匹茲堡海盜」中）
+      const score = name.length;
+      if (score >= 2 && score > bestScore) {
+        bestScore = score;
+        bestMatch = en;
+      }
+    } else if (name.includes(zh)) {
+      // 對照表被完整包含在用戶輸入中（如「洛杉磯湖人」包含「湖人」）
+      const score = zh.length;
+      if (score >= 2 && score > bestScore) {
+        bestScore = score;
+        bestMatch = en;
+      }
+    }
+  }
+
+  if (bestMatch) return bestMatch;
+
+  // 3. 嘗試逐字匹配（至少兩個字相同）
+  for (const [zh, en] of Object.entries(TEAM_NAME_EN)) {
+    let matchCount = 0;
+    for (let i = 0; i < name.length - 1; i++) {
+      const twoChars = name.substring(i, i + 2);
+      if (zh.includes(twoChars)) {
+        matchCount = Math.max(matchCount, 2);
+        break;
+      }
+    }
+    if (matchCount >= 2) {
+      return en;
+    }
+  }
+
+  return name; // 找不到就回傳原樣
+}
+
+
 import { readFileSync } from 'fs';
 
 // ========== 足球 CSV 自動下載與解析 ==========
